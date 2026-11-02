@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ALLON — Demo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; background:#04050d; overflow:hidden; font-family:-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #scroller { height:100dvh; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
+  #scroller::-webkit-scrollbar { display:none; }
+  .room { position:relative; height:100dvh; aspect-ratio:1080/860; max-width:none; }
+  .room > img { position:absolute; inset:0; width:100%; height:100%; display:block; user-select:none; -webkit-user-drag:none; }
+  .screen {
+    position:absolute; overflow:hidden; cursor:pointer; border-radius:2.5%/6%;
+    background-color:#0a0618; background-image:url('seam.jpg'); background-size:contain;
+    background-repeat:no-repeat; background-position:center;
+    box-shadow:inset 0 0 0 1px rgba(120,140,255,.14);
+  }
+  .screen .app { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#fff; }
+  .screen .app .ic { font-size:clamp(14px, 4.2vh, 44px); line-height:1; filter:drop-shadow(0 2px 6px rgba(0,0,0,.55)); }
+  .screen .app .nm { font-size:clamp(8px, 1.55vh, 15px); font-weight:600; letter-spacing:.04em; text-shadow:0 1px 4px rgba(0,0,0,.7); }
+  .screen:active { filter:brightness(1.25); }
+  #banner {
+    position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20; pointer-events:none;
+    background:rgba(6,8,20,.72); border:1px solid rgba(130,150,255,.28); border-radius:999px;
+    padding:7px 16px; color:#dfe6ff; font-size:13px; letter-spacing:.02em; white-space:nowrap;
+    backdrop-filter: blur(6px);
+  }
+  #banner b { background:linear-gradient(90deg,#6ee7ff,#a78bfa,#f472b6); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #sheetWrap { position:fixed; inset:0; z-index:40; display:none; }
+  #sheetWrap.open { display:block; }
+  #sheetDim { position:absolute; inset:0; background:rgba(2,3,10,.55); }
+  #sheet {
+    position:absolute; left:0; right:0; bottom:0; max-height:62dvh; overflow-y:auto;
+    background:#0b0d1d; border-top:1px solid rgba(130,150,255,.3); border-radius:18px 18px 0 0;
+    padding:16px 16px 26px; color:#e7ebff;
+  }
+  #sheet h3 { font-size:15px; font-weight:600; margin-bottom:2px; }
+  #sheet p { font-size:12px; color:#9aa5cf; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+  .tile { border:1px solid rgba(140,160,255,.16); background:#12142a; border-radius:14px; padding:12px 4px 9px; text-align:center; cursor:pointer; color:#eef1ff; }
+  .tile:active { filter:brightness(1.35); }
+  .tile .ic { font-size:26px; display:block; margin-bottom:5px; }
+  .tile .nm { font-size:11px; font-weight:600; }
+  .rowBtns { display:flex; gap:10px; margin-top:14px; }
+  .rowBtns button { flex:1; padding:12px; border-radius:12px; border:1px solid rgba(140,160,255,.25); background:#171a33; color:#dfe6ff; font-size:13px; font-weight:600; cursor:pointer; }
+  .rowBtns button.clear { color:#ff9db1; border-color:rgba(255,120,150,.35); }
+</style>
+</head>
+<body>
+<div id="banner"><b>ALLON</b> — Demo &nbsp;·&nbsp; Tap any screen to make it yours.</div>
+<div id="scroller">
+  <div class="room" id="room">
+    <img src="room.jpg" alt="ALLON Flagship room">
+  </div>
+</div>
+
+<div id="sheetWrap">
+  <div id="sheetDim"></div>
+  <div id="sheet">
+    <h3 id="sheetTitle">Put an app on this screen</h3>
+    <p>Your pick stays on your device only.</p>
+    <div class="grid" id="appGrid"></div>
+    <div class="rowBtns">
+      <button class="clear" id="clearBtn">Clear screen</button>
+      <button id="closeBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var APPS = [
+    {id:'youtube',  nm:'YouTube',  ic:'▶️', bg:'linear-gradient(135deg,#3d0a0a,#8f1212 55%,#c81e1e)'},
+    {id:'videos',   nm:'Videos',   ic:'🎬', bg:'linear-gradient(135deg,#160b33,#4c1d95 55%,#7c3aed)'},
+    {id:'music',    nm:'Music',    ic:'🎧', bg:'linear-gradient(135deg,#04202b,#0e7490 55%,#06b6d4)'},
+    {id:'browser',  nm:'Browser',  ic:'🌐', bg:'linear-gradient(135deg,#0a1e3d,#1d4ed8 55%,#3b82f6)'},
+    {id:'notes',    nm:'Notes',    ic:'📝', bg:'linear-gradient(135deg,#2b2304,#a16207 55%,#eab308)'},
+    {id:'photos',   nm:'Photos',   ic:'🖼️', bg:'linear-gradient(135deg,#122b04,#4d7c0f 55%,#84cc16)'},
+    {id:'games',    nm:'Games',    ic:'🎮', bg:'linear-gradient(135deg,#2b0430,#86198f 55%,#d946ef)'},
+    {id:'chat',     nm:'Chat',     ic:'💬', bg:'linear-gradient(135deg,#04291a,#15803d 55%,#22c55e)'},
+    {id:'calendar', nm:'Calendar', ic:'📅', bg:'linear-gradient(135deg,#2e1065,#6d28d9 55%,#a78bfa)'},
+    {id:'mail',     nm:'Mail',     ic:'✉️', bg:'linear-gradient(135deg,#082f49,#0369a1 55%,#38bdf8)'},
+    {id:'files',    nm:'Files',    ic:'🗂️', bg:'linear-gradient(135deg,#1c1917,#57534e 55%,#a8a29e)'},
+    {id:'news',     nm:'News',     ic:'📰', bg:'linear-gradient(135deg,#111827,#374151 55%,#6b7280)'}
+  ];
+  // Screen positions (% of room image 1080x860), inside each monitor's bezel.
+  var SCREENS = [
+    {id:'mountL', x:22.4, y:17.4, w:16.4, h:13.4},
+    {id:'mountR', x:61.0, y:18.2, w:16.5, h:12.4},
+    {id:'upperL', x:25.9, y:46.2, w:13.9, h:12.6},
+    {id:'upperC', x:43.1, y:46.8, w:13.8, h:12.1},
+    {id:'upperR', x:59.9, y:46.1, w:14.0, h:12.8},
+    {id:'vertL',  x:15.1, y:58.2, w:10.7, h:28.2},
+    {id:'main',   x:28.3, y:63.4, w:43.6, h:23.0},
+    {id:'vertR',  x:74.1, y:58.2, w:10.6, h:28.2},
+    {id:'laptop', x:45.2, y:83.2, w:9.4,  h:7.4}
+  ];
+  var KEY = 'allon-demo-screens-v1';
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e) { state = {}; }
+  var room = document.getElementById('room');
+  var els = {};
+  function appById(id){ for (var i=0;i<APPS.length;i++) if (APPS[i].id===id) return APPS[i]; return null; }
+  function render(id){
+    var el = els[id], a = appById(state[id]);
+    if (a) {
+      el.style.backgroundImage = 'none';
+      el.style.backgroundColor = '';
+      el.innerHTML = '<div class="app" style="background:' + a.bg + '"><div class="ic">' + a.ic + '</div><div class="nm">' + a.nm + '</div></div>';
+    } else {
+      el.innerHTML = '';
+      el.style.backgroundImage = "url('seam.jpg')";
+      el.style.backgroundColor = '#0a0618';
+    }
+  }
+  SCREENS.forEach(function(s){
+    var d = document.createElement('div');
+    d.className = 'screen'; d.id = 'scr-' + s.id;
+    d.style.left = s.x + '%'; d.style.top = s.y + '%'; d.style.width = s.w + '%'; d.style.height = s.h + '%';
+    d.setAttribute('role','button'); d.setAttribute('aria-label','screen ' + s.id);
+    d.addEventListener('click', function(){ openSheet(s.id); });
+    room.appendChild(d); els[s.id] = d; render(s.id);
+  });
+  // Picker sheet
+  var wrap = document.getElementById('sheetWrap'), grid = document.getElementById('appGrid'), current = null;
+  APPS.forEach(function(a){
+    var t = document.createElement('div'); t.className = 'tile';
+    t.innerHTML = '<span class="ic">' + a.ic + '</span><span class="nm">' + a.nm + '</span>';
+    t.addEventListener('click', function(){
+      if (!current) return;
+      state[current] = a.id; save(); render(current); closeSheet();
+    });
+    grid.appendChild(t);
+  });
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  function openSheet(id){ current = id; wrap.classList.add('open'); }
+  function closeSheet(){ wrap.classList.remove('open'); current = null; }
+  document.getElementById('closeBtn').addEventListener('click', closeSheet);
+  document.getElementById('sheetDim').addEventListener('click', closeSheet);
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    if (!current) return; delete state[current]; save(); render(current); closeSheet();
+  });
+  // Center the main screen on first load.
+  var sc = document.getElementById('scroller');
+  requestAnimationFrame(function(){ sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2; });
+})();
+</script>
+</body>
+</html>
